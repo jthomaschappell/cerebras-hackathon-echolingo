@@ -1,9 +1,8 @@
 "use client";
 import { useState, useRef, useEffect, ReactNode } from "react";
-import { Box, AppBar, Toolbar, Typography, Paper, IconButton, InputBase, List, ListItem, ListItemText, Avatar, Fab, Select, MenuItem, FormControl, InputLabel, Button } from "@mui/material";
+import { Box, AppBar, Toolbar, Typography, Paper, List, ListItem, ListItemText, Avatar, Select, MenuItem, FormControl, InputLabel, Button } from "@mui/material";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import MicIcon from "@mui/icons-material/Mic";
-import GraphicEqIcon from "@mui/icons-material/GraphicEq";
 
 const constructionColors = {
   primary: "#FFB300", // Construction yellow
