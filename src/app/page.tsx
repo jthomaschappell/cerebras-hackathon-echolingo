@@ -1,101 +1,103 @@
-import Image from "next/image";
+"use client";
+import { useState } from "react";
+import { Box, AppBar, Toolbar, Typography, Paper, IconButton, InputBase, List, ListItem, ListItemText, Avatar, Fab } from "@mui/material";
+import ConstructionIcon from "@mui/icons-material/Construction";
+import MicIcon from "@mui/icons-material/Mic";
+import SendIcon from "@mui/icons-material/Send";
+
+const constructionColors = {
+  primary: "#FFB300", // Construction yellow
+  secondary: "#FF6F00", // Orange
+  background: "#212121", // Dark gray
+  chatBubble: "#FFF3E0", // Light yellow
+};
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+  const [messages, setMessages] = useState([
+    { from: "bot", text: "¡Hola! Pulsa el micrófono y habla en español." },
+  ]);
+  const [input, setInput] = useState("");
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
+  return (
+    <Box sx={{ minHeight: "100vh", bgcolor: constructionColors.background }}>
+      <AppBar position="static" sx={{ bgcolor: constructionColors.primary }}>
+        <Toolbar>
+          <ConstructionIcon sx={{ mr: 2 }} />
+          <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
+            Traductor de Voz para Obreros
+          </Typography>
+        </Toolbar>
+      </AppBar>
+      <Box
+        sx={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "calc(100vh - 64px)",
+          p: 2,
+        }}
+      >
+        <Paper
+          elevation={6}
+          sx={{
+            width: "100%",
+            maxWidth: 420,
+            flex: 1,
+            mb: 2,
+            bgcolor: constructionColors.chatBubble,
+            p: 2,
+            overflowY: "auto",
+            minHeight: 320,
+            maxHeight: 400,
+            display: "flex",
+            flexDirection: "column",
+            gap: 1,
+          }}
         >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+          <List sx={{ width: "100%" }}>
+            {messages.map((msg, idx) => (
+              <ListItem key={idx} sx={{ justifyContent: msg.from === "bot" ? "flex-start" : "flex-end" }}>
+                <Avatar sx={{ bgcolor: msg.from === "bot" ? constructionColors.primary : constructionColors.secondary, mr: 1 }}>
+                  {msg.from === "bot" ? <ConstructionIcon /> : "T"}
+                </Avatar>
+                <ListItemText
+                  primary={msg.text}
+                  primaryTypographyProps={{
+                    sx: {
+                      color: constructionColors.background,
+                      fontWeight: msg.from === "bot" ? 600 : 400,
+                    },
+                  }}
+                />
+              </ListItem>
+            ))}
+          </List>
+        </Paper>
+        <Box sx={{ display: "flex", alignItems: "center", width: "100%", maxWidth: 420 }}>
+          <InputBase
+            sx={{
+              flex: 1,
+              bgcolor: "white",
+              borderRadius: 2,
+              px: 2,
+              py: 1,
+              mr: 1,
+              fontSize: 18,
+            }}
+            placeholder="Escribe o usa el micrófono..."
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            disabled
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+          <IconButton color="primary" sx={{ bgcolor: constructionColors.primary, mr: 1 }} size="large" disabled>
+            <SendIcon />
+          </IconButton>
+          <Fab color="secondary" aria-label="mic" sx={{ bgcolor: constructionColors.secondary }} disabled>
+            <MicIcon />
+          </Fab>
+        </Box>
+      </Box>
+    </Box>
   );
 }
