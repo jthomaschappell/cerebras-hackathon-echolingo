@@ -1,11 +1,9 @@
 import { NextRequest } from "next/server";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 
-export const runtime = "edge";
-
 export async function POST(req: NextRequest) {
   try {
-    const { text } = await req.json();
+    const { text, voiceId } = await req.json();
     if (!text || typeof text !== "string") {
       return new Response(JSON.stringify({ error: "Missing or invalid 'text' field" }), {
         status: 400,
@@ -21,12 +19,21 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const voiceId = "21m00Tcm4TlvDq8ikWAM"; // Default Eleven Labs voice (Rachel)
+    // Default to Enrique M Nieto if no voiceId provided
+    const selectedVoiceId = typeof voiceId === "string" && voiceId.length > 0 ? voiceId : "gbTn1bmCvNgk0QEAVyfM";
     const modelId = "eleven_multilingual_v2";
+
+    // TODO: There is a dropdown where you can cycle the voices. 
+    // gbTn1bmCvNgk0QEAVyfM // Enrique M Nieto. 
+    // Nh2zY9kknu6z4pZy6FhD // David Martin
+    // 6xftrpatV0jGmFHxDjUv // Martin Osborne
+    // sKgg4MPUDBy69X7iv3fA // Alejandro Duran
+    // KHCvMklQZZo0O30ERnVn // Sara Martin. 
+
 
     const elevenlabs = new ElevenLabsClient({ apiKey });
     // Get a Node.js Readable stream from the SDK
-    const audioStream = await elevenlabs.textToSpeech.stream(voiceId, {
+    const audioStream = await elevenlabs.textToSpeech.stream(selectedVoiceId, {
       text,
       modelId,
       outputFormat: "mp3_44100_128",

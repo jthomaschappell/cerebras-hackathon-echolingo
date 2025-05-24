@@ -1,6 +1,6 @@
 "use client";
-import { useState, useRef, useEffect } from "react";
-import { Box, AppBar, Toolbar, Typography, Paper, IconButton, InputBase, List, ListItem, ListItemText, Avatar, Fab } from "@mui/material";
+import { useState, useRef, useEffect, ReactNode } from "react";
+import { Box, AppBar, Toolbar, Typography, Paper, IconButton, InputBase, List, ListItem, ListItemText, Avatar, Fab, Select, MenuItem, FormControl, InputLabel, Button } from "@mui/material";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import MicIcon from "@mui/icons-material/Mic";
 import GraphicEqIcon from "@mui/icons-material/GraphicEq";
@@ -91,15 +91,34 @@ function VoiceVisualizer({ active, stream }: { active: boolean; stream: MediaStr
   return <canvas ref={canvasRef} width={60} height={40} style={{ display: "block" }} />;
 }
 
+type Message = {
+  from: string;
+  text: string | ReactNode;
+  english?: string;
+};
+
+const VOICES = [
+  { id: "gbTn1bmCvNgk0QEAVyfM", name: "Enrique M Nieto" },
+  { id: "Nh2zY9kknu6z4pZy6FhD", name: "David Martin" },
+  { id: "6xftrpatV0jGmFHxDjUv", name: "Martin Osborne" },
+  { id: "sKgg4MPUDBy69X7iv3fA", name: "Alejandro Duran" },
+  { id: "KHCvMklQZZo0O30ERnVn", name: "Sara Martin" },
+];
+
 export default function Home() {
-  const [messages, setMessages] = useState([
-    { from: "bot", text: "¡Hola! Pulsa el micrófono y habla en español." },
+  const [messages, setMessages] = useState<Message[]>([
+    { from: "bot", text: "¡Hola! Pulsa el micrófono y habla en español.", english: undefined },
   ]);
   const [input, setInput] = useState("");
   const [recording, setRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [selectedVoice, setSelectedVoice] = useState(VOICES[0].id);
 
   // Start recording audio
   const startRecording = async () => {
@@ -133,7 +152,7 @@ export default function Home() {
     const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
     setMessages((msgs) => [
       ...msgs,
-      { from: "user", text: "[Audio enviado, transcribiendo...]" },
+      { from: "user", text: "[Audio enviado, transcribiendo...]", english: undefined },
     ]);
     // Send audio to backend for transcription and translation
     const formData = new FormData();
@@ -157,26 +176,68 @@ export default function Home() {
                 </span>
               </span>
             ),
+            english: data.english,
           }
-        : { from: "user", text: data.transcript || "[No se pudo transcribir]" },
+        : { from: "user", text: data.transcript || "[No se pudo transcribir]", english: undefined },
     ]);
   };
+
+  // Play English translation as audio
+  const playEnglishAudio = async (englishText: string) => {
+    setAudioLoading(true);
+    setAudioError(null);
+    setAudioUrl(null);
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: englishText, voiceId: selectedVoice }),
+      });
+      if (!res.ok) throw new Error("Failed to fetch audio");
+      const audioBlob = await res.blob();
+      const url = URL.createObjectURL(audioBlob);
+      setAudioUrl(url);
+      setAudioLoading(false);
+      setTimeout(() => {
+        audioRef.current?.play();
+      }, 100); // Ensure <audio> is rendered before playing
+    } catch (err: any) {
+      setAudioError(err.message || "Unknown error");
+      setAudioLoading(false);
+    }
+  };
+
+  // Automatically play English audio when a new English translation is available
+  useEffect(() => {
+    if (messages.length === 0) return;
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg.english && typeof lastMsg.english === "string") {
+      playEnglishAudio(lastMsg.english);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [messages, selectedVoice]);
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: constructionColors.background }}>
       <AppBar position="static" sx={{ bgcolor: constructionColors.primary }}>
-        <Toolbar sx={{ justifyContent: "center" }}>
-          <ConstructionIcon sx={{ mr: 2 }} />
-          <Typography
-            variant="h6"
-            sx={{
-              fontWeight: 700,
-              textAlign: "center",
-              flexGrow: 1,
-            }}
-          >
-            Traductor de Voz para Obreros
-          </Typography>
+        <Toolbar sx={{ justifyContent: "center", display: "flex" }}>
+          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", flexGrow: 1 }}>
+            <ConstructionIcon sx={{ fontSize: 36, mr: 1, color: constructionColors.secondary }} />
+            <Typography
+              variant="h4"
+              sx={{
+                fontFamily: 'Montserrat, sans-serif',
+                fontWeight: 900,
+                letterSpacing: 2,
+                color: constructionColors.secondary,
+                textShadow: '1px 1px 4px #fff3e0',
+                userSelect: 'none',
+                textTransform: 'uppercase',
+              }}
+            >
+              Echolingo
+            </Typography>
+          </Box>
         </Toolbar>
       </AppBar>
       <Box
@@ -189,6 +250,21 @@ export default function Home() {
           p: 2,
         }}
       >
+        {/* Voice selection dropdown */}
+        <FormControl sx={{ mb: 2, minWidth: 220 }} size="small">
+          <InputLabel id="voice-select-label">Voz</InputLabel>
+          <Select
+            labelId="voice-select-label"
+            id="voice-select"
+            value={selectedVoice}
+            label="Voz"
+            onChange={(e) => setSelectedVoice(e.target.value)}
+          >
+            {VOICES.map((voice) => (
+              <MenuItem key={voice.id} value={voice.id}>{voice.name}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
         <Paper
           elevation={6}
           sx={{
@@ -224,20 +300,37 @@ export default function Home() {
               </ListItem>
             ))}
           </List>
+          {/* Audio element for playback */}
+          {audioUrl && (
+            <audio ref={audioRef} src={audioUrl} controls style={{ width: "100%", marginTop: 8 }} onEnded={() => setAudioUrl(null)} />
+          )}
         </Paper>
-        <Box sx={{ display: "flex", justifyContent: "center", width: "100%", maxWidth: 420, mt: 2 }}>
-          <Fab
+        <Box sx={{ display: "flex", justifyContent: "center", width: "100%", maxWidth: 420, mt: 1 }}>
+          <Button
+            variant="contained"
             color={recording ? "error" : "secondary"}
-            aria-label="mic"
-            sx={{ bgcolor: recording ? "#d32f2f" : constructionColors.secondary, width: 72, height: 72 }}
+            sx={{
+              bgcolor: recording ? "#d32f2f" : constructionColors.secondary,
+              width: "100%",
+              height: 64,
+              borderRadius: 2,
+              fontSize: 20,
+              fontWeight: 700,
+              boxShadow: 3,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              textTransform: "none",
+              transition: "background 0.2s",
+              '&:hover': {
+                bgcolor: recording ? "#b71c1c" : "#ff9800",
+              },
+            }}
             onClick={recording ? stopRecording : startRecording}
+            startIcon={recording ? <VoiceVisualizer active={recording} stream={mediaStream} /> : <MicIcon sx={{ fontSize: 36 }} />}
           >
-            {recording ? (
-              <VoiceVisualizer active={recording} stream={mediaStream} />
-            ) : (
-              <MicIcon sx={{ fontSize: 40 }} />
-            )}
-          </Fab>
+            {recording ? "Grabando... Pulsa para parar" : "Pulsa para hablar"}
+          </Button>
         </Box>
       </Box>
     </Box>
