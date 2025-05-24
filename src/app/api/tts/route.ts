@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Return the stream as the response
-    return new Response(audioStream as any, {
+    return new Response(audioStream as unknown as ReadableStream<Uint8Array>, {
       status: 200,
       headers: {
         "Content-Type": "audio/mpeg",
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
         "Cache-Control": "no-store",
       },
     });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("[TTS] Error:", err);
     return new Response(JSON.stringify({ error: "Failed to generate speech" }), {
       status: 500,

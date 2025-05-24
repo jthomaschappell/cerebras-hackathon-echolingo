@@ -44,8 +44,9 @@ export async function POST(req: NextRequest) {
       console.warn("[Transcribe] No transcription results returned");
       return NextResponse.json({ transcript: "" });
     }
-    const transcript = googleData.results
-      .map((result: any) => result.alternatives[0].transcript)
+    type GoogleResult = { alternatives: { transcript: string }[] };
+    const transcript = (googleData.results as GoogleResult[])
+      .map((result) => result.alternatives[0].transcript)
       .join(" ");
     console.log(`[Transcribe] Transcript: ${transcript}`);
 
@@ -80,7 +81,7 @@ export async function POST(req: NextRequest) {
       console.error("[Transcribe] Error extracting translation", e);
     }
     return NextResponse.json({ transcript, english });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("[Transcribe] Error:", err);
     return NextResponse.json({ error: "Failed to transcribe audio" }, { status: 500 });
   }

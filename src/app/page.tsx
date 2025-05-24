@@ -12,6 +12,8 @@ const constructionColors = {
   chatBubble: "#FFF3E0", // Light yellow
 };
 
+const BAR_COLORS = ["#fff", "#fff", "#fff", "#fff", "#fff"];
+
 function VoiceVisualizer({ active, stream }: { active: boolean; stream: MediaStream | null }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // Use fewer, wider bars for Google Meet style
@@ -19,7 +21,6 @@ function VoiceVisualizer({ active, stream }: { active: boolean; stream: MediaStr
   const BAR_WIDTH = 8;
   const BAR_GAP = 6;
   const BAR_RADIUS = 4;
-  const BAR_COLORS = ["#fff", "#fff", "#fff", "#fff", "#fff"];
   const barHeights = useRef<number[]>(Array(BAR_COUNT).fill(10));
 
   useEffect(() => {
@@ -112,7 +113,6 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([
     { from: "bot", text: "¡Hola! Pulsa el micrófono y habla en español.", english: undefined },
   ]);
-  const [input, setInput] = useState("");
   const [recording, setRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -205,8 +205,8 @@ export default function Home() {
           audioRef.current?.play();
         }, 100);
       }
-    } catch (err: any) {
-      setMessages((prev) => prev.map((msg, idx) => idx === msgIdx ? { ...msg, audioLoading: false, audioError: err.message || "Unknown error" } : msg));
+    } catch (err: unknown) {
+      setMessages((prev) => prev.map((msg, idx) => idx === msgIdx ? { ...msg, audioLoading: false, audioError: err instanceof Error ? err.message : "Unknown error" } : msg));
     }
   };
 
