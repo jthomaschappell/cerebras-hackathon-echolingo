@@ -1,9 +1,9 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Box, AppBar, Toolbar, Typography, Paper, IconButton, InputBase, List, ListItem, ListItemText, Avatar, Fab } from "@mui/material";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import MicIcon from "@mui/icons-material/Mic";
-import SendIcon from "@mui/icons-material/Send";
+import GraphicEqIcon from "@mui/icons-material/GraphicEq";
 
 const constructionColors = {
   primary: "#FFB300", // Construction yellow
@@ -12,18 +12,169 @@ const constructionColors = {
   chatBubble: "#FFF3E0", // Light yellow
 };
 
+function VoiceVisualizer({ active, stream }: { active: boolean; stream: MediaStream | null }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  // Use fewer, wider bars for Google Meet style
+  const BAR_COUNT = 5;
+  const BAR_WIDTH = 8;
+  const BAR_GAP = 6;
+  const BAR_RADIUS = 4;
+  const BAR_COLORS = ["#fff", "#fff", "#fff", "#fff", "#fff"];
+  const barHeights = useRef<number[]>(Array(BAR_COUNT).fill(10));
+
+  useEffect(() => {
+    if (!active || !stream || !canvasRef.current) return;
+    const audioCtx = new window.AudioContext();
+    const analyser = audioCtx.createAnalyser();
+    const source = audioCtx.createMediaStreamSource(stream);
+    analyser.fftSize = 32;
+    source.connect(analyser);
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    let running = true;
+    function draw() {
+      if (!running) return;
+      analyser.getByteFrequencyData(dataArray);
+      // Map frequency bins to bars
+      for (let i = 0; i < BAR_COUNT; i++) {
+        // Average a range of bins for each bar
+        const start = Math.floor((i * dataArray.length) / BAR_COUNT);
+        const end = Math.floor(((i + 1) * dataArray.length) / BAR_COUNT);
+        const avg =
+          dataArray.slice(start, end).reduce((a, b) => a + b, 0) /
+          (end - start || 1);
+        // Smooth animation: lerp to new height
+        barHeights.current[i] =
+          barHeights.current[i] * 0.6 + ((avg / 255) * 32 + 8) * 0.4;
+      }
+      ctx!.clearRect(0, 0, canvas.width, canvas.height);
+      // Center bars horizontally
+      const totalWidth = BAR_COUNT * BAR_WIDTH + (BAR_COUNT - 1) * BAR_GAP;
+      const x0 = (canvas.width - totalWidth) / 2;
+      for (let i = 0; i < BAR_COUNT; i++) {
+        ctx!.fillStyle = BAR_COLORS[i % BAR_COLORS.length];
+        const x = x0 + i * (BAR_WIDTH + BAR_GAP);
+        const y = canvas.height - barHeights.current[i];
+        // Draw rounded bar
+        ctx!.beginPath();
+        ctx!.moveTo(x + BAR_RADIUS, y);
+        ctx!.lineTo(x + BAR_WIDTH - BAR_RADIUS, y);
+        ctx!.quadraticCurveTo(x + BAR_WIDTH, y, x + BAR_WIDTH, y + BAR_RADIUS);
+        ctx!.lineTo(x + BAR_WIDTH, y + barHeights.current[i] - BAR_RADIUS);
+        ctx!.quadraticCurveTo(
+          x + BAR_WIDTH,
+          y + barHeights.current[i],
+          x + BAR_WIDTH - BAR_RADIUS,
+          y + barHeights.current[i]
+        );
+        ctx!.lineTo(x + BAR_RADIUS, y + barHeights.current[i]);
+        ctx!.quadraticCurveTo(
+          x,
+          y + barHeights.current[i],
+          x,
+          y + barHeights.current[i] - BAR_RADIUS
+        );
+        ctx!.lineTo(x, y + BAR_RADIUS);
+        ctx!.quadraticCurveTo(x, y, x + BAR_RADIUS, y);
+        ctx!.closePath();
+        ctx!.fill();
+      }
+      requestAnimationFrame(draw);
+    }
+    draw();
+    return () => {
+      running = false;
+      audioCtx.close();
+    };
+  }, [active, stream]);
+  return <canvas ref={canvasRef} width={60} height={40} style={{ display: "block" }} />;
+}
+
 export default function Home() {
   const [messages, setMessages] = useState([
     { from: "bot", text: "¡Hola! Pulsa el micrófono y habla en español." },
   ]);
   const [input, setInput] = useState("");
+  const [recording, setRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
+
+  // Start recording audio
+  const startRecording = async () => {
+    setRecording(true);
+    audioChunksRef.current = [];
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    setMediaStream(stream);
+    const mediaRecorder = new window.MediaRecorder(stream);
+    mediaRecorderRef.current = mediaRecorder;
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunksRef.current.push(event.data);
+      }
+    };
+    mediaRecorder.onstop = handleStop;
+    mediaRecorder.start();
+  };
+
+  // Stop recording audio
+  const stopRecording = () => {
+    setRecording(false);
+    if (mediaStream) {
+      mediaStream.getTracks().forEach((track) => track.stop());
+      setMediaStream(null);
+    }
+    mediaRecorderRef.current?.stop();
+  };
+
+  // Handle audio after recording stops
+  const handleStop = async () => {
+    const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
+    setMessages((msgs) => [
+      ...msgs,
+      { from: "user", text: "[Audio enviado, transcribiendo...]" },
+    ]);
+    // Send audio to backend for transcription and translation
+    const formData = new FormData();
+    formData.append("audio", audioBlob, "audio.webm");
+    const res = await fetch("/api/transcribe", {
+      method: "POST",
+      body: formData,
+    });
+    const data = await res.json();
+    setMessages((msgs) => [
+      ...msgs.slice(0, -1),
+      data.transcript && data.english
+        ? {
+            from: "user",
+            text: (
+              <span>
+                <span>{data.transcript}</span>
+                <br />
+                <span style={{ color: '#388e3c', fontWeight: 500, fontSize: 16 }}>
+                  {data.english}
+                </span>
+              </span>
+            ),
+          }
+        : { from: "user", text: data.transcript || "[No se pudo transcribir]" },
+    ]);
+  };
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: constructionColors.background }}>
       <AppBar position="static" sx={{ bgcolor: constructionColors.primary }}>
-        <Toolbar>
+        <Toolbar sx={{ justifyContent: "center" }}>
           <ConstructionIcon sx={{ mr: 2 }} />
-          <Typography variant="h6" sx={{ flexGrow: 1, fontWeight: 700 }}>
+          <Typography
+            variant="h6"
+            sx={{
+              fontWeight: 700,
+              textAlign: "center",
+              flexGrow: 1,
+            }}
+          >
             Traductor de Voz para Obreros
           </Typography>
         </Toolbar>
@@ -74,27 +225,18 @@ export default function Home() {
             ))}
           </List>
         </Paper>
-        <Box sx={{ display: "flex", alignItems: "center", width: "100%", maxWidth: 420 }}>
-          <InputBase
-            sx={{
-              flex: 1,
-              bgcolor: "white",
-              borderRadius: 2,
-              px: 2,
-              py: 1,
-              mr: 1,
-              fontSize: 18,
-            }}
-            placeholder="Escribe o usa el micrófono..."
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            disabled
-          />
-          <IconButton color="primary" sx={{ bgcolor: constructionColors.primary, mr: 1 }} size="large" disabled>
-            <SendIcon />
-          </IconButton>
-          <Fab color="secondary" aria-label="mic" sx={{ bgcolor: constructionColors.secondary }} disabled>
-            <MicIcon />
+        <Box sx={{ display: "flex", justifyContent: "center", width: "100%", maxWidth: 420, mt: 2 }}>
+          <Fab
+            color={recording ? "error" : "secondary"}
+            aria-label="mic"
+            sx={{ bgcolor: recording ? "#d32f2f" : constructionColors.secondary, width: 72, height: 72 }}
+            onClick={recording ? stopRecording : startRecording}
+          >
+            {recording ? (
+              <VoiceVisualizer active={recording} stream={mediaStream} />
+            ) : (
+              <MicIcon sx={{ fontSize: 40 }} />
+            )}
           </Fab>
         </Box>
       </Box>
