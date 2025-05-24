@@ -95,6 +95,9 @@ type Message = {
   from: string;
   text: string | ReactNode;
   english?: string;
+  audioUrl?: string | null;
+  audioLoading?: boolean;
+  audioError?: string | null;
 };
 
 const VOICES = [
@@ -114,11 +117,11 @@ export default function Home() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
-  const [audioLoading, setAudioLoading] = useState(false);
-  const [audioError, setAudioError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [selectedVoice, setSelectedVoice] = useState(VOICES[0].id);
+  const [lastEnglish, setLastEnglish] = useState<string | null>(null);
+  const [hasPlayed, setHasPlayed] = useState(false);
+  const [currentAudioUrl, setCurrentAudioUrl] = useState<string | null>(null);
 
   // Start recording audio
   const startRecording = async () => {
@@ -182,11 +185,9 @@ export default function Home() {
     ]);
   };
 
-  // Play English translation as audio
-  const playEnglishAudio = async (englishText: string) => {
-    setAudioLoading(true);
-    setAudioError(null);
-    setAudioUrl(null);
+  // Play English translation as audio for a specific message
+  const playEnglishAudio = async (msgIdx: number, englishText: string, autoPlay = false) => {
+    setMessages((prev) => prev.map((msg, idx) => idx === msgIdx ? { ...msg, audioLoading: true, audioError: null } : msg));
     try {
       const res = await fetch("/api/tts", {
         method: "POST",
@@ -196,26 +197,47 @@ export default function Home() {
       if (!res.ok) throw new Error("Failed to fetch audio");
       const audioBlob = await res.blob();
       const url = URL.createObjectURL(audioBlob);
-      setAudioUrl(url);
-      setAudioLoading(false);
-      setTimeout(() => {
-        audioRef.current?.play();
-      }, 100); // Ensure <audio> is rendered before playing
+      setMessages((prev) => prev.map((msg, idx) => idx === msgIdx ? { ...msg, audioUrl: url, audioLoading: false } : msg));
+      setCurrentAudioUrl(url);
+      setHasPlayed(autoPlay ? false : true);
+      if (autoPlay) {
+        setTimeout(() => {
+          audioRef.current?.play();
+        }, 100);
+      }
     } catch (err: any) {
-      setAudioError(err.message || "Unknown error");
-      setAudioLoading(false);
+      setMessages((prev) => prev.map((msg, idx) => idx === msgIdx ? { ...msg, audioLoading: false, audioError: err.message || "Unknown error" } : msg));
     }
   };
 
-  // Automatically play English audio when a new English translation is available
+  // When a new English translation is received, auto-load and play audio
   useEffect(() => {
-    if (messages.length === 0) return;
-    const lastMsg = messages[messages.length - 1];
-    if (lastMsg.english && typeof lastMsg.english === "string") {
-      playEnglishAudio(lastMsg.english);
+    const latestIdx = messages.length - 1;
+    const latest = messages[latestIdx];
+    if (latest && latest.english && latest.english !== lastEnglish && !latest.audioUrl && !latest.audioLoading) {
+      setLastEnglish(latest.english);
+      playEnglishAudio(latestIdx, latest.english, true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages, selectedVoice]);
+  }, [messages]);
+
+  // When audio finishes playing, allow replay
+  const handleAudioEnded = () => {
+    setHasPlayed(true);
+  };
+
+  // When user clicks play on a previous message
+  const handlePlayClick = (msgIdx: number, english: string, audioUrl?: string | null) => {
+    setCurrentAudioUrl(audioUrl || null);
+    setHasPlayed(true);
+    if (!audioUrl) {
+      playEnglishAudio(msgIdx, english, false);
+    } else {
+      setTimeout(() => {
+        audioRef.current?.play();
+      }, 100);
+    }
+  };
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: constructionColors.background }}>
@@ -297,12 +319,26 @@ export default function Home() {
                     },
                   }}
                 />
+                {/* Show play button for all user messages with English translation */}
+                {msg.english && (
+                  <>
+                    {msg.audioLoading && <span style={{ marginLeft: 8, color: constructionColors.secondary, fontWeight: 600 }}>Loading...</span>}
+                    <button
+                      style={{ marginLeft: 8, padding: "4px 12px", borderRadius: 6, background: constructionColors.secondary, color: "#fff", border: "none", fontWeight: 600, cursor: "pointer" }}
+                      onClick={() => handlePlayClick(idx, msg.english!, msg.audioUrl)}
+                      disabled={msg.audioLoading}
+                    >
+                      Play English Audio
+                    </button>
+                    {msg.audioError && <span style={{ color: "red", marginLeft: 8 }}>{msg.audioError}</span>}
+                  </>
+                )}
               </ListItem>
             ))}
           </List>
           {/* Audio element for playback */}
-          {audioUrl && (
-            <audio ref={audioRef} src={audioUrl} controls style={{ width: "100%", marginTop: 8 }} onEnded={() => setAudioUrl(null)} />
+          {currentAudioUrl && (
+            <audio ref={audioRef} src={currentAudioUrl} controls style={{ width: "100%", marginTop: 8 }} onEnded={handleAudioEnded} autoPlay={!hasPlayed} />
           )}
         </Paper>
         <Box sx={{ display: "flex", justifyContent: "center", width: "100%", maxWidth: 420, mt: 1 }}>
