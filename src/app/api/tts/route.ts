@@ -3,7 +3,7 @@ import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 
 export async function POST(req: NextRequest) {
   try {
-    const { text, voiceId } = await req.json();
+    const { text, voiceId, mode } = await req.json();
     if (!text || typeof text !== "string") {
       return new Response(JSON.stringify({ error: "Missing or invalid 'text' field" }), {
         status: 400,
@@ -30,6 +30,8 @@ export async function POST(req: NextRequest) {
     // sKgg4MPUDBy69X7iv3fA // Alejandro Duran
     // KHCvMklQZZo0O30ERnVn // Sara Martin. 
 
+    // The ElevenLabs API will auto-detect language, but you can pass the text in the correct language.
+    // If you want to force language, you could adjust here, but for now just pass the text as is.
 
     const elevenlabs = new ElevenLabsClient({ apiKey });
     // Get a Node.js Readable stream from the SDK

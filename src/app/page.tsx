@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect, ReactNode } from "react";
-import { Box, AppBar, Toolbar, Typography, Paper, List, ListItem, ListItemText, Avatar, Select, MenuItem, FormControl, InputLabel, Button } from "@mui/material";
+import { Box, AppBar, Toolbar, Typography, Paper, List, ListItem, ListItemText, Avatar, Select, MenuItem, FormControl, InputLabel, Button, Switch, FormControlLabel } from "@mui/material";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import MicIcon from "@mui/icons-material/Mic";
 
@@ -109,8 +109,13 @@ const VOICES = [
 ];
 
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([
-    { from: "bot", text: "¡Hola! Pulsa el micrófono y habla en español.", english: undefined },
+  const [englishMode, setEnglishMode] = useState(false); // false = Spanish, true = English
+
+  // Helper for UI text
+  const t = (es: string, en: string) => (englishMode ? en : es);
+
+  const [messages, setMessages] = useState<Message[]>(() => [
+    { from: "bot", text: t("¡Hola! Pulsa el micrófono y habla en español.", "Hi! Press the microphone and speak in English."), english: undefined },
   ]);
   const [recording, setRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -154,11 +159,12 @@ export default function Home() {
     const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
     setMessages((msgs) => [
       ...msgs,
-      { from: "user", text: "[Audio enviado, transcribiendo...]", english: undefined },
+      { from: "user", text: t("[Audio enviado, transcribiendo...]", "[Audio sent, transcribing...]") },
     ]);
     // Send audio to backend for transcription and translation
     const formData = new FormData();
     formData.append("audio", audioBlob, "audio.webm");
+    formData.append("mode", englishMode ? "en" : "es");
     const res = await fetch("/api/transcribe", {
       method: "POST",
       body: formData,
@@ -171,27 +177,39 @@ export default function Home() {
             from: "user",
             text: (
               <span>
-                <span>{data.transcript}</span>
-                <br />
-                <span style={{ color: '#388e3c', fontWeight: 500, fontSize: 16 }}>
-                  {data.english}
-                </span>
+                {englishMode ? (
+                  <>
+                    <span>{data.english}</span>
+                    <br />
+                    <span style={{ color: '#388e3c', fontWeight: 500, fontSize: 16 }}>{data.transcript}</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{data.transcript}</span>
+                    <br />
+                    <span style={{ color: '#388e3c', fontWeight: 500, fontSize: 16 }}>{data.english}</span>
+                  </>
+                )}
               </span>
             ),
-            english: data.english,
+            english: englishMode ? data.transcript : data.english,
           }
-        : { from: "user", text: data.transcript || "[No se pudo transcribir]", english: undefined },
+        : { from: "user", text: data.transcript || t("[No se pudo transcribir]", "[Could not transcribe]"), english: undefined },
     ]);
   };
 
-  // Play English translation as audio for a specific message
-  const playEnglishAudio = async (msgIdx: number, englishText: string, autoPlay = false) => {
+  // Play translation as audio for a specific message
+  const playEnglishAudio = async (msgIdx: number, textToSpeak: string, autoPlay = false) => {
     setMessages((prev) => prev.map((msg, idx) => idx === msgIdx ? { ...msg, audioLoading: true, audioError: null } : msg));
     try {
+      // In English mode, send the Spanish translation to TTS. In Spanish mode, send the English translation.
+      const msg = messages[msgIdx];
+      const ttsText = englishMode ? msg?.english : textToSpeak;
+      const ttsMode = englishMode ? "es" : "en";
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: englishText, voiceId: selectedVoice }),
+        body: JSON.stringify({ text: ttsText, voiceId: selectedVoice, mode: ttsMode }),
       });
       if (!res.ok) throw new Error("Failed to fetch audio");
       const audioBlob = await res.blob();
@@ -209,13 +227,13 @@ export default function Home() {
     }
   };
 
-  // When a new English translation is received, auto-load and play audio
+  // When a new translation is received, auto-load and play audio
   useEffect(() => {
     const latestIdx = messages.length - 1;
     const latest = messages[latestIdx];
     if (latest && latest.english && latest.english !== lastEnglish && !latest.audioUrl && !latest.audioLoading) {
       setLastEnglish(latest.english);
-      playEnglishAudio(latestIdx, latest.english, true);
+      playEnglishAudio(latestIdx, englishMode ? latest.english : latest.english, true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [messages]);
@@ -226,17 +244,30 @@ export default function Home() {
   };
 
   // When user clicks play on a previous message
-  const handlePlayClick = (msgIdx: number, english: string, audioUrl?: string | null) => {
+  const handlePlayClick = (msgIdx: number, textToSpeak: string, audioUrl?: string | null) => {
     setCurrentAudioUrl(audioUrl || null);
     setHasPlayed(true);
     if (!audioUrl) {
-      playEnglishAudio(msgIdx, english, false);
+      // In English mode, play Spanish translation; in Spanish mode, play English translation
+      playEnglishAudio(msgIdx, textToSpeak, false);
     } else {
       setTimeout(() => {
         audioRef.current?.play();
       }, 100);
     }
   };
+
+  useEffect(() => {
+    setMessages((msgs) => {
+      if (msgs.length > 0 && msgs[0].from === "bot") {
+        return [
+          { ...msgs[0], text: t("¡Hola! Pulsa el micrófono y habla en español.", "Hi! Press the microphone and speak in English.") },
+          ...msgs.slice(1),
+        ];
+      }
+      return msgs;
+    });
+  }, [englishMode]);
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: constructionColors.background }}>
@@ -271,21 +302,43 @@ export default function Home() {
           p: 2,
         }}
       >
-        {/* Voice selection dropdown */}
-        <FormControl sx={{ mb: 2, minWidth: 220 }} size="small">
-          <InputLabel id="voice-select-label">Voz</InputLabel>
-          <Select
-            labelId="voice-select-label"
-            id="voice-select"
-            value={selectedVoice}
-            label="Voz"
-            onChange={(e) => setSelectedVoice(e.target.value)}
-          >
-            {VOICES.map((voice) => (
-              <MenuItem key={voice.id} value={voice.id}>{voice.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        {/* Voice selection dropdown and English mode toggle */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+          <FormControl sx={{ minWidth: 220 }} size="small">
+            <InputLabel id="voice-select-label" sx={{ bgcolor: constructionColors.chatBubble, color: '#1a202c', px: 0.5, borderRadius: 1 }}>{t("Voz", "Voice")}</InputLabel>
+            <Select
+              labelId="voice-select-label"
+              id="voice-select"
+              value={selectedVoice}
+              label={t("Voz", "Voice")}
+              onChange={(e) => setSelectedVoice(e.target.value)}
+              sx={{
+                backgroundColor: constructionColors.chatBubble,
+                color: '#1a202c',
+                borderRadius: 1,
+                border: '1px solid #d1d5db',
+                boxShadow: '0 2px 8px 0 rgba(0,0,0,0.08)',
+                fontWeight: 600,
+                '& .MuiSelect-icon': { color: '#1a202c' },
+                '&:hover': {
+                  backgroundColor: '#ffe9b6',
+                },
+              }}
+            >
+              {VOICES.map((voice) => (
+                <MenuItem key={voice.id} value={voice.id} sx={{ color: '#1a202c', fontWeight: 500 }}>{voice.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          <Paper elevation={2} sx={{ bgcolor: constructionColors.chatBubble, px: 2, py: 1, display: 'flex', alignItems: 'center', borderRadius: 1, boxShadow: '0 2px 8px 0 rgba(0,0,0,0.08)' }}>
+            <FormControlLabel
+              control={<Switch checked={englishMode} onChange={() => setEnglishMode((v) => !v)} color="primary" />}
+              label={<span style={{ color: '#1a202c', fontWeight: 600 }}>{t("Versión en inglés", "English version")}</span>}
+              labelPlacement="end"
+              sx={{ ml: 0 }}
+            />
+          </Paper>
+        </Box>
         <Paper
           elevation={6}
           sx={{
@@ -318,16 +371,16 @@ export default function Home() {
                     },
                   }}
                 />
-                {/* Show play button for all user messages with English translation */}
+                {/* Show play button for all user messages with translation */}
                 {msg.english && (
                   <>
-                    {msg.audioLoading && <span style={{ marginLeft: 8, color: constructionColors.secondary, fontWeight: 600 }}>Loading...</span>}
+                    {msg.audioLoading && <span style={{ marginLeft: 8, color: constructionColors.secondary, fontWeight: 600 }}>{t("Cargando...", "Loading...")}</span>}
                     <button
                       style={{ marginLeft: 8, padding: "4px 12px", borderRadius: 6, background: constructionColors.secondary, color: "#fff", border: "none", fontWeight: 600, cursor: "pointer" }}
                       onClick={() => handlePlayClick(idx, msg.english!, msg.audioUrl)}
                       disabled={msg.audioLoading}
                     >
-                      Play English Audio
+                      {t("Reproducir audio en inglés", "Play English Audio")}
                     </button>
                     {msg.audioError && <span style={{ color: "red", marginLeft: 8 }}>{msg.audioError}</span>}
                   </>
@@ -364,7 +417,7 @@ export default function Home() {
             onClick={recording ? stopRecording : startRecording}
             startIcon={recording ? <VoiceVisualizer active={recording} stream={mediaStream} /> : <MicIcon sx={{ fontSize: 36 }} />}
           >
-            {recording ? "Grabando... Pulsa para parar" : "Pulsa para hablar"}
+            {recording ? t("Grabando... Pulsa para parar", "Recording... Tap to stop") : t("Pulsa para hablar", "Tap to speak")}
           </Button>
         </Box>
       </Box>
