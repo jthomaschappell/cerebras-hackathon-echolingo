@@ -271,21 +271,35 @@ export default function Home() {
           p: 2,
         }}
       >
-        {/* Voice selection dropdown */}
-        <FormControl sx={{ mb: 2, minWidth: 220 }} size="small">
-          <InputLabel id="voice-select-label">Voz</InputLabel>
-          <Select
-            labelId="voice-select-label"
-            id="voice-select"
-            value={selectedVoice}
-            label="Voz"
-            onChange={(e) => setSelectedVoice(e.target.value)}
-          >
-            {VOICES.map((voice) => (
-              <MenuItem key={voice.id} value={voice.id}>{voice.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        {/* Voice selection dropdown on tan card */}
+        <Paper
+          elevation={6}
+          sx={{
+            width: "100%",
+            maxWidth: 420,
+            mb: 2,
+            bgcolor: constructionColors.chatBubble,
+            p: 2,
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+          }}
+        >
+          <FormControl sx={{ minWidth: 220 }} size="small">
+            <InputLabel id="voice-select-label">Voz</InputLabel>
+            <Select
+              labelId="voice-select-label"
+              id="voice-select"
+              value={selectedVoice}
+              label="Voz"
+              onChange={(e) => setSelectedVoice(e.target.value)}
+            >
+              {VOICES.map((voice) => (
+                <MenuItem key={voice.id} value={voice.id}>{voice.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Paper>
         <Paper
           elevation={6}
           sx={{
