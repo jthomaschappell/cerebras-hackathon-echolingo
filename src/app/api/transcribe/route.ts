@@ -15,7 +15,6 @@ export async function POST(req: NextRequest) {
     const audioBytes = Buffer.from(arrayBuffer).toString("base64");
     console.log(`[Transcribe] Audio file received, size: ${audioBytes.length} bytes`);
 
-    const mode = formData.get("mode") === "en" ? "en" : "es";
     // Prepare Google Cloud Speech-to-Text API request
     const apiKey = process.env.GOOGLE_SPEECH_API_KEY;
     if (!apiKey) {
@@ -32,7 +31,7 @@ export async function POST(req: NextRequest) {
           config: {
             encoding: "WEBM_OPUS",
             sampleRateHertz: 48000,
-            languageCode: mode === "en" ? "en-US" : "es-ES",
+            languageCode: "es-ES",
             enableAutomaticPunctuation: true,
           },
           audio: { content: audioBytes },
@@ -57,24 +56,13 @@ export async function POST(req: NextRequest) {
       console.error("[Transcribe] Missing OpenRouter API key");
       return NextResponse.json({ error: "Missing OpenRouter API key" }, { status: 500 });
     }
-    let openRouterPayload;
-    if (mode === "en") {
-      openRouterPayload = {
-        model: "qwen/qwen3-32b",
-        messages: [
-          { role: "user", content: transcript + " /no_think" },
-          { role: "system", content: "You are a helpful assistant that translates English to Spanish. You only translate the words, you don't respond or add any other text." }
-        ]
-      };
-    } else {
-      openRouterPayload = {
-        model: "qwen/qwen3-32b",
-        messages: [
-          { role: "user", content: transcript + " /no_think" },
-          { role: "system", content: "You are a helpful assistant that translates Spanish to English. You only translate the words, you don't respond or add any other text." }
-        ]
-      };
-    }
+    const openRouterPayload = {
+      model: "qwen/qwen3-32b",
+      messages: [
+        { role: "user", content: transcript + " /no_think" },
+        { role: "system", content: "You are a helpful assistant that translates Spanish to English. You only translate the words, you don't respond or add any other text." }
+      ]
+    };
     console.log("[Transcribe] Sending transcript to OpenRouter for translation");
     const openRouterRes = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
