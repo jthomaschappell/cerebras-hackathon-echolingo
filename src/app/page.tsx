@@ -1,8 +1,11 @@
 "use client";
+import React from "react";
 import { useState, useRef, useEffect, ReactNode } from "react";
 import { Box, AppBar, Toolbar, Typography, Paper, List, ListItem, ListItemText, Avatar, Select, MenuItem, FormControl, InputLabel, Button, FormControlLabel, Switch } from "@mui/material";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import MicIcon from "@mui/icons-material/Mic";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import HeadphonesIcon from "@mui/icons-material/Headphones";
 
 const constructionColors = {
   primary: "#FFB300", // Construction yellow
@@ -99,13 +102,14 @@ type Message = {
   audioUrl?: string | null;
   audioLoading?: boolean;
   audioError?: string | null;
+  voice?: string;
+  language?: string;
 };
 
 const VOICES = [
   { id: "gbTn1bmCvNgk0QEAVyfM", name: "Enrique M Nieto" },
   { id: "Nh2zY9kknu6z4pZy6FhD", name: "David Martin" },
   { id: "6xftrpatV0jGmFHxDjUv", name: "Martin Osborne" },
-  { id: "sKgg4MPUDBy69X7iv3fA", name: "Alejandro Duran" },
   { id: "KHCvMklQZZo0O30ERnVn", name: "Sara Martin" },
 ];
 
@@ -183,7 +187,7 @@ export default function Home() {
     const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
     setMessages((msgs) => [
       ...msgs,
-      { from: "user", text: UI_TEXT[englishMode ? 'en' : 'es'].audioSent, english: undefined },
+      { from: "user", text: UI_TEXT[englishMode ? 'en' : 'es'].audioSent, english: undefined, voice: VOICES.find(v => v.id === selectedVoice)?.name, language: englishMode ? 'English' : 'Spanish' },
     ]);
     // Send audio to backend for transcription and translation
     const formData = new FormData();
@@ -210,8 +214,10 @@ export default function Home() {
             ),
             english: englishMode ? data.transcript : data.translation,
             spanish: englishMode ? data.translation : data.transcript,
+            voice: VOICES.find(v => v.id === selectedVoice)?.name,
+            language: englishMode ? 'English' : 'Spanish',
           }
-        : { from: "user", text: data.transcript || UI_TEXT[englishMode ? 'en' : 'es'].notTranscribed, english: undefined },
+        : { from: "user", text: data.transcript || UI_TEXT[englishMode ? 'en' : 'es'].notTranscribed, english: undefined, voice: VOICES.find(v => v.id === selectedVoice)?.name, language: englishMode ? 'English' : 'Spanish' },
     ]);
   };
 
@@ -269,6 +275,28 @@ export default function Home() {
       }, 100);
     }
   };
+
+  useEffect(() => {
+    // When englishMode changes, update the first bot message to match the language
+    setMessages((msgs) => {
+      if (msgs.length === 0 || msgs[0].from !== 'bot') {
+        return [{ from: 'bot', text: UI_TEXT[englishMode ? 'en' : 'es'].speakPrompt, english: undefined }, ...msgs];
+      }
+      // Replace the first message if it's a bot message
+      return [
+        { from: 'bot', text: UI_TEXT[englishMode ? 'en' : 'es'].speakPrompt, english: undefined },
+        ...msgs.slice(1)
+      ];
+    });
+  }, [englishMode]);
+
+  // Set initial message based on language
+  useEffect(() => {
+    setMessages([
+      { from: 'bot', text: UI_TEXT[englishMode ? 'en' : 'es'].speakPrompt, english: undefined },
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: constructionColors.background }}>
@@ -357,34 +385,58 @@ export default function Home() {
         >
           <List sx={{ width: "100%" }}>
             {messages.map((msg, idx) => (
-              <ListItem key={idx} sx={{ justifyContent: msg.from === "bot" ? "flex-start" : "flex-end" }}>
-                <Avatar sx={{ bgcolor: msg.from === "bot" ? constructionColors.primary : constructionColors.secondary, mr: 1 }}>
-                  {msg.from === "bot" ? <ConstructionIcon /> : "T"}
-                </Avatar>
-                <ListItemText
-                  primary={msg.text}
-                  primaryTypographyProps={{
-                    sx: {
-                      color: constructionColors.background,
-                      fontWeight: msg.from === "bot" ? 600 : 400,
-                    },
-                  }}
-                />
-                {/* Show play button for all user messages with translation */}
-                {(englishMode ? msg.spanish : msg.english) && (
-                  <>
-                    {msg.audioLoading && <span style={{ marginLeft: 8, color: constructionColors.secondary, fontWeight: 600 }}>{UI_TEXT[englishMode ? 'en' : 'es'].loading}</span>}
-                    <button
-                      style={{ marginLeft: 8, padding: "4px 12px", borderRadius: 6, background: constructionColors.secondary, color: "#fff", border: "none", fontWeight: 600, cursor: "pointer" }}
-                      onClick={() => handlePlayClick(idx, englishMode ? msg.spanish! : msg.english!, msg.audioUrl)}
-                      disabled={msg.audioLoading}
-                    >
-                      {UI_TEXT[englishMode ? 'en' : 'es'].playAudio}
-                    </button>
-                    {msg.audioError && <span style={{ color: "red", marginLeft: 8 }}>{msg.audioError}</span>}
-                  </>
+              <React.Fragment key={idx}>
+                {idx > 0 && (
+                  <hr
+                    style={{
+                      border: 0,
+                      borderTop: `1px solid ${constructionColors.background}22`,
+                      margin: '4px 0',
+                      width: '100%',
+                    }}
+                  />
                 )}
-              </ListItem>
+                <ListItem sx={{ justifyContent: msg.from === "bot" ? "flex-start" : "flex-end" }}>
+                  <Avatar sx={{ bgcolor: msg.from === "bot" ? constructionColors.primary : constructionColors.secondary, mr: 1 }}>
+                    {msg.from === "bot" ? <ConstructionIcon /> : "T"}
+                  </Avatar>
+                  <ListItemText
+                    primary={
+                      <>
+                        {msg.text}
+                        {(msg.voice || msg.language) && (
+                          <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                            {msg.voice && <span>Voice: {msg.voice}</span>}
+                            {msg.voice && msg.language && <span> &nbsp;|&nbsp; </span>}
+                            {msg.language && <span>Language: {msg.language}</span>}
+                          </div>
+                        )}
+                      </>
+                    }
+                    primaryTypographyProps={{
+                      sx: {
+                        color: constructionColors.background,
+                        fontWeight: msg.from === "bot" ? 600 : 400,
+                      },
+                    }}
+                  />
+                  {/* Show play button for all user messages with translation */}
+                  {(englishMode ? msg.spanish : msg.english) && (
+                    <>
+                      {msg.audioLoading && <span style={{ marginLeft: 8, color: constructionColors.secondary, fontWeight: 600 }}>{UI_TEXT[englishMode ? 'en' : 'es'].loading}</span>}
+                      <button
+                        style={{ marginLeft: 8, padding: "4px 12px", borderRadius: 6, background: constructionColors.secondary, color: "#fff", border: "none", fontWeight: 600, cursor: "pointer", display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}
+                        onClick={() => handlePlayClick(idx, englishMode ? msg.spanish! : msg.english!, msg.audioUrl)}
+                        disabled={msg.audioLoading}
+                        aria-label={`Play ${msg.language} Audio`}
+                      >
+                        <HeadphonesIcon style={{ fontSize: 32, color: '#fff' }} />
+                      </button>
+                      {msg.audioError && <span style={{ color: "red", marginLeft: 8 }}>{msg.audioError}</span>}
+                    </>
+                  )}
+                </ListItem>
+              </React.Fragment>
             ))}
           </List>
           {/* Audio element for playback */}
