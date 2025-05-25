@@ -15,6 +15,13 @@ export async function POST(req: NextRequest) {
     const audioBytes = Buffer.from(arrayBuffer).toString("base64");
     console.log(`[Transcribe] Audio file received, size: ${audioBytes.length} bytes`);
 
+    const direction = formData.get("direction") || "es-en";
+    let languageCode = "es-ES";
+    let systemPrompt = "You are a helpful assistant that translates Spanish to English. You only translate the words, you don't respond or add any other text.";
+    if (direction === "en-es") {
+      languageCode = "en-US";
+      systemPrompt = "You are a helpful assistant that translates English to Spanish. You only translate the words, you don't respond or add any other text.";
+    }
     // Prepare Google Cloud Speech-to-Text API request
     const apiKey = process.env.GOOGLE_SPEECH_API_KEY;
     if (!apiKey) {
@@ -31,7 +38,7 @@ export async function POST(req: NextRequest) {
           config: {
             encoding: "WEBM_OPUS",
             sampleRateHertz: 48000,
-            languageCode: "es-ES",
+            languageCode,
             enableAutomaticPunctuation: true,
           },
           audio: { content: audioBytes },
@@ -49,7 +56,6 @@ export async function POST(req: NextRequest) {
       .map((result) => result.alternatives[0].transcript)
       .join(" ");
     console.log(`[Transcribe] Transcript: ${transcript}`);
-
     // Send transcript to OpenRouter API for translation
     const openRouterKey = process.env.OPENROUTER_API_KEY;
     if (!openRouterKey) {
@@ -60,7 +66,7 @@ export async function POST(req: NextRequest) {
       model: "qwen/qwen3-32b",
       messages: [
         { role: "user", content: transcript + " /no_think" },
-        { role: "system", content: "You are a helpful assistant that translates Spanish to English. You only translate the words, you don't respond or add any other text." }
+        { role: "system", content: systemPrompt }
       ]
     };
     console.log("[Transcribe] Sending transcript to OpenRouter for translation");
@@ -74,13 +80,13 @@ export async function POST(req: NextRequest) {
     });
     const openRouterData = await openRouterRes.json();
     console.log("[Transcribe] OpenRouter API response:", JSON.stringify(openRouterData));
-    let english = "";
+    let translation = "";
     try {
-      english = openRouterData.choices?.[0]?.message?.content?.trim() || "";
+      translation = openRouterData.choices?.[0]?.message?.content?.trim() || "";
     } catch (e) {
       console.error("[Transcribe] Error extracting translation", e);
     }
-    return NextResponse.json({ transcript, english });
+    return NextResponse.json({ transcript, translation });
   } catch (err: unknown) {
     console.error("[Transcribe] Error:", err);
     return NextResponse.json({ error: "Failed to transcribe audio" }, { status: 500 });

@@ -1,6 +1,6 @@
 "use client";
 import { useState, useRef, useEffect, ReactNode } from "react";
-import { Box, AppBar, Toolbar, Typography, Paper, List, ListItem, ListItemText, Avatar, Select, MenuItem, FormControl, InputLabel, Button } from "@mui/material";
+import { Box, AppBar, Toolbar, Typography, Paper, List, ListItem, ListItemText, Avatar, Select, MenuItem, FormControl, InputLabel, Button, FormControlLabel, Switch } from "@mui/material";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import MicIcon from "@mui/icons-material/Mic";
 
@@ -95,6 +95,7 @@ type Message = {
   from: string;
   text: string | ReactNode;
   english?: string;
+  spanish?: string;
   audioUrl?: string | null;
   audioLoading?: boolean;
   audioError?: string | null;
@@ -107,6 +108,33 @@ const VOICES = [
   { id: "sKgg4MPUDBy69X7iv3fA", name: "Alejandro Duran" },
   { id: "KHCvMklQZZo0O30ERnVn", name: "Sara Martin" },
 ];
+
+const UI_TEXT = {
+  es: {
+    title: 'Echolingo',
+    speakPrompt: '¡Hola! Pulsa el micrófono y habla en español.',
+    pressToSpeak: 'Pulsa para hablar',
+    recording: 'Grabando... Pulsa para parar',
+    playAudio: 'Play English Audio',
+    voiceLabel: 'Voz',
+    loading: 'Cargando...',
+    audioSent: '[Audio enviado, transcribiendo...]',
+    notTranscribed: '[No se pudo transcribir]',
+    englishVersion: 'English Version',
+  },
+  en: {
+    title: 'Echolingo',
+    speakPrompt: 'Hi! Press the microphone and speak in English.',
+    pressToSpeak: 'Press to speak',
+    recording: 'Recording... Press to stop',
+    playAudio: 'Play Spanish Audio',
+    voiceLabel: 'Voice',
+    loading: 'Loading...',
+    audioSent: '[Audio sent, transcribing...]',
+    notTranscribed: '[Could not transcribe]',
+    englishVersion: 'English Version',
+  },
+};
 
 export default function Home() {
   const [messages, setMessages] = useState<Message[]>([
@@ -121,6 +149,7 @@ export default function Home() {
   const [lastEnglish, setLastEnglish] = useState<string | null>(null);
   const [hasPlayed, setHasPlayed] = useState(false);
   const [currentAudioUrl, setCurrentAudioUrl] = useState<string | null>(null);
+  const [englishMode, setEnglishMode] = useState(false);
 
   // Start recording audio
   const startRecording = async () => {
@@ -154,11 +183,12 @@ export default function Home() {
     const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
     setMessages((msgs) => [
       ...msgs,
-      { from: "user", text: "[Audio enviado, transcribiendo...]", english: undefined },
+      { from: "user", text: UI_TEXT[englishMode ? 'en' : 'es'].audioSent, english: undefined },
     ]);
     // Send audio to backend for transcription and translation
     const formData = new FormData();
     formData.append("audio", audioBlob, "audio.webm");
+    formData.append("direction", englishMode ? "en-es" : "es-en");
     const res = await fetch("/api/transcribe", {
       method: "POST",
       body: formData,
@@ -166,32 +196,33 @@ export default function Home() {
     const data = await res.json();
     setMessages((msgs) => [
       ...msgs.slice(0, -1),
-      data.transcript && data.english
+      data.transcript && data.translation
         ? {
             from: "user",
             text: (
               <span>
-                <span>{data.transcript}</span>
+                <span>{englishMode ? data.transcript : data.translation}</span>
                 <br />
                 <span style={{ color: '#388e3c', fontWeight: 500, fontSize: 16 }}>
-                  {data.english}
+                  {englishMode ? data.translation : data.transcript}
                 </span>
               </span>
             ),
-            english: data.english,
+            english: englishMode ? data.transcript : data.translation,
+            spanish: englishMode ? data.translation : data.transcript,
           }
-        : { from: "user", text: data.transcript || "[No se pudo transcribir]", english: undefined },
+        : { from: "user", text: data.transcript || UI_TEXT[englishMode ? 'en' : 'es'].notTranscribed, english: undefined },
     ]);
   };
 
-  // Play English translation as audio for a specific message
-  const playEnglishAudio = async (msgIdx: number, englishText: string, autoPlay = false) => {
+  // Play translation as audio for a specific message
+  const playEnglishAudio = async (msgIdx: number, textToSpeak: string, autoPlay = false) => {
     setMessages((prev) => prev.map((msg, idx) => idx === msgIdx ? { ...msg, audioLoading: true, audioError: null } : msg));
     try {
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: englishText, voiceId: selectedVoice }),
+        body: JSON.stringify({ text: textToSpeak, voiceId: selectedVoice }),
       });
       if (!res.ok) throw new Error("Failed to fetch audio");
       const audioBlob = await res.blob();
@@ -209,16 +240,17 @@ export default function Home() {
     }
   };
 
-  // When a new English translation is received, auto-load and play audio
+  // When a new translation is received, auto-load and play audio
   useEffect(() => {
     const latestIdx = messages.length - 1;
     const latest = messages[latestIdx];
-    if (latest && latest.english && latest.english !== lastEnglish && !latest.audioUrl && !latest.audioLoading) {
-      setLastEnglish(latest.english);
-      playEnglishAudio(latestIdx, latest.english, true);
+    const valueToCheck = englishMode ? latest?.spanish : latest?.english;
+    if (latest && valueToCheck && !latest.audioUrl && !latest.audioLoading) {
+      setLastEnglish(valueToCheck);
+      playEnglishAudio(latestIdx, valueToCheck, true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [messages]);
+  }, [messages, englishMode]);
 
   // When audio finishes playing, allow replay
   const handleAudioEnded = () => {
@@ -226,11 +258,11 @@ export default function Home() {
   };
 
   // When user clicks play on a previous message
-  const handlePlayClick = (msgIdx: number, english: string, audioUrl?: string | null) => {
+  const handlePlayClick = (msgIdx: number, textToSpeak: string, audioUrl?: string | null) => {
     setCurrentAudioUrl(audioUrl || null);
     setHasPlayed(true);
     if (!audioUrl) {
-      playEnglishAudio(msgIdx, english, false);
+      playEnglishAudio(msgIdx, textToSpeak, false);
     } else {
       setTimeout(() => {
         audioRef.current?.play();
@@ -256,7 +288,7 @@ export default function Home() {
                 textTransform: 'uppercase',
               }}
             >
-              Echolingo
+              {UI_TEXT[englishMode ? 'en' : 'es'].title}
             </Typography>
           </Box>
         </Toolbar>
@@ -281,17 +313,17 @@ export default function Home() {
             bgcolor: constructionColors.chatBubble,
             p: 2,
             display: "flex",
-            justifyContent: "center",
+            justifyContent: "space-between",
             alignItems: "center",
           }}
         >
-          <FormControl sx={{ minWidth: 220 }} size="small">
-            <InputLabel id="voice-select-label">Voz</InputLabel>
+          <FormControl sx={{ minWidth: 180, mr: 2 }} size="small">
+            <InputLabel id="voice-select-label">{UI_TEXT[englishMode ? 'en' : 'es'].voiceLabel}</InputLabel>
             <Select
               labelId="voice-select-label"
               id="voice-select"
               value={selectedVoice}
-              label="Voz"
+              label={UI_TEXT[englishMode ? 'en' : 'es'].voiceLabel}
               onChange={(e) => setSelectedVoice(e.target.value)}
             >
               {VOICES.map((voice) => (
@@ -299,6 +331,12 @@ export default function Home() {
               ))}
             </Select>
           </FormControl>
+          {/* English Version toggle */}
+          <FormControlLabel
+            control={<Switch color="primary" checked={englishMode} onChange={(_, checked) => setEnglishMode(checked)} />}
+            label={UI_TEXT[englishMode ? 'en' : 'es'].englishVersion}
+            sx={{ ml: 2 }}
+          />
         </Paper>
         <Paper
           elevation={6}
@@ -332,16 +370,16 @@ export default function Home() {
                     },
                   }}
                 />
-                {/* Show play button for all user messages with English translation */}
-                {msg.english && (
+                {/* Show play button for all user messages with translation */}
+                {(englishMode ? msg.spanish : msg.english) && (
                   <>
-                    {msg.audioLoading && <span style={{ marginLeft: 8, color: constructionColors.secondary, fontWeight: 600 }}>Loading...</span>}
+                    {msg.audioLoading && <span style={{ marginLeft: 8, color: constructionColors.secondary, fontWeight: 600 }}>{UI_TEXT[englishMode ? 'en' : 'es'].loading}</span>}
                     <button
                       style={{ marginLeft: 8, padding: "4px 12px", borderRadius: 6, background: constructionColors.secondary, color: "#fff", border: "none", fontWeight: 600, cursor: "pointer" }}
-                      onClick={() => handlePlayClick(idx, msg.english!, msg.audioUrl)}
+                      onClick={() => handlePlayClick(idx, englishMode ? msg.spanish! : msg.english!, msg.audioUrl)}
                       disabled={msg.audioLoading}
                     >
-                      Play English Audio
+                      {UI_TEXT[englishMode ? 'en' : 'es'].playAudio}
                     </button>
                     {msg.audioError && <span style={{ color: "red", marginLeft: 8 }}>{msg.audioError}</span>}
                   </>
@@ -378,7 +416,7 @@ export default function Home() {
             onClick={recording ? stopRecording : startRecording}
             startIcon={recording ? <VoiceVisualizer active={recording} stream={mediaStream} /> : <MicIcon sx={{ fontSize: 36 }} />}
           >
-            {recording ? "Grabando... Pulsa para parar" : "Pulsa para hablar"}
+            {recording ? UI_TEXT[englishMode ? 'en' : 'es'].recording : UI_TEXT[englishMode ? 'en' : 'es'].pressToSpeak}
           </Button>
         </Box>
       </Box>
