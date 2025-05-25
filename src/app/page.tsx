@@ -4,7 +4,6 @@ import { useState, useRef, useEffect, ReactNode } from "react";
 import { Box, AppBar, Toolbar, Typography, Paper, List, ListItem, ListItemText, Avatar, Select, MenuItem, FormControl, InputLabel, Button, FormControlLabel, Switch } from "@mui/material";
 import ConstructionIcon from "@mui/icons-material/Construction";
 import MicIcon from "@mui/icons-material/Mic";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import HeadphonesIcon from "@mui/icons-material/Headphones";
 
 const constructionColors = {
@@ -150,7 +149,7 @@ export default function Home() {
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [selectedVoice, setSelectedVoice] = useState(VOICES[0].id);
-  const [lastEnglish, setLastEnglish] = useState<string | null>(null);
+
   const [hasPlayed, setHasPlayed] = useState(false);
   const [currentAudioUrl, setCurrentAudioUrl] = useState<string | null>(null);
   const [englishMode, setEnglishMode] = useState(false);
@@ -202,21 +201,21 @@ export default function Home() {
       ...msgs.slice(0, -1),
       data.transcript && data.translation
         ? {
-            from: "user",
-            text: (
-              <span>
-                <span>{englishMode ? data.transcript : data.translation}</span>
-                <br />
-                <span style={{ color: '#388e3c', fontWeight: 500, fontSize: 16 }}>
-                  {englishMode ? data.translation : data.transcript}
-                </span>
+          from: "user",
+          text: (
+            <span>
+              <span>{englishMode ? data.transcript : data.translation}</span>
+              <br />
+              <span style={{ color: '#388e3c', fontWeight: 500, fontSize: 16 }}>
+                {englishMode ? data.translation : data.transcript}
               </span>
-            ),
-            english: englishMode ? data.transcript : data.translation,
-            spanish: englishMode ? data.translation : data.transcript,
-            voice: VOICES.find(v => v.id === selectedVoice)?.name,
-            language: englishMode ? 'English' : 'Spanish',
-          }
+            </span>
+          ),
+          english: englishMode ? data.transcript : data.translation,
+          spanish: englishMode ? data.translation : data.transcript,
+          voice: VOICES.find(v => v.id === selectedVoice)?.name,
+          language: englishMode ? 'English' : 'Spanish',
+        }
         : { from: "user", text: data.transcript || UI_TEXT[englishMode ? 'en' : 'es'].notTranscribed, english: undefined, voice: VOICES.find(v => v.id === selectedVoice)?.name, language: englishMode ? 'English' : 'Spanish' },
     ]);
   };
@@ -252,7 +251,6 @@ export default function Home() {
     const latest = messages[latestIdx];
     const valueToCheck = englishMode ? latest?.spanish : latest?.english;
     if (latest && valueToCheck && !latest.audioUrl && !latest.audioLoading) {
-      setLastEnglish(valueToCheck);
       playEnglishAudio(latestIdx, valueToCheck, true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
